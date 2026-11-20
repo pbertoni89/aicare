@@ -76,12 +76,20 @@ heater running for **22 hours**.
 
 ## ⚙️ Configuration
 
-| Environment variable           | Default | Meaning                                                    |
-|--------------------------------|---------|------------------------------------------------------------|
-| `AICARE_EXAMPLE_ELECTRIC_LOAD` | `2000`  | Reference load in watts for the weekly "equivalent hours" table |
+| Environment variable                    | Default | Meaning                                                         |
+|-----------------------------------------|---------|-----------------------------------------------------------------|
+| `AICARE_ANTHROPIC_WH_PER_1M_OUTPUT`     | `1950`  | Wh per 1M output tokens                                         |
+| `AICARE_ANTHROPIC_WH_PER_1M_INPUT`      | `240`   | Wh per 1M input and cache-creation tokens                       |
+| `AICARE_ANTHROPIC_WH_PER_1M_CACHE_READ` | `39`    | Wh per 1M cache-read tokens                                     |
+| `AICARE_GRID_KG_CO2_PER_KWH`            | `0.275` | Grid carbon intensity, kg CO₂ per kWh                           |
+| `AICARE_EXAMPLE_ELECTRIC_LOAD`          | `2000`  | Reference load in watts for the weekly "equivalent hours" table |
+
+If a value is missing, not a number, or negative, aicare uses the default. The electric load must also be greater than zero.
+The last line of the output lists every setting, its value, and whether it came from the environment or the default.
 
 ```bash
 AICARE_EXAMPLE_ELECTRIC_LOAD=60 python3 aicare.py   # in hours of an old 60 W light bulb
+AICARE_GRID_KG_CO2_PER_KWH=0.05 python3 aicare.py  # if your grid is mostly hydro/nuclear
 ```
 
 ## 🔬 How the numbers are estimated
@@ -99,8 +107,8 @@ aicare multiplies token counts by per-token energy factors, then by a grid carbo
 | Italy 🇮🇹 | 0.275 kg CO₂ / kWh   |
 
 These are **order-of-magnitude estimates**, not measurements. Anthropic doesn't publish per-token energy
-figures, so take the results as a way to raise awareness, not as an audit. All the constants are at the top of
-`aicare.py`, so you can change them to match your own assumptions or your local grid.
+figures, so take the results as a way to raise awareness, not as an audit. You can change every factor with
+an environment variable (see [Configuration](#️-configuration)) to match your own assumptions or your local grid.
 
 Weeks start on Monday and use ISO week numbers.
 

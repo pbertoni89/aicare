@@ -7,11 +7,42 @@ import subprocess
 from collections import defaultdict
 from datetime import date, datetime
 
-# Energy parameters for high-density models (e.g. Opus/Sonnet 3.5)
-WH_PER_1M_OUTPUT = 1950.0
-WH_PER_1M_CACHE_READ = 39.0
-WH_PER_1M_INPUT = 240.0
-KG_CO2_PER_KWH_ITALY = 0.275
+
+# Every setting resolved by env_float(): {name: (value, source)}, reported at exit
+ENV_SETTINGS: dict[str, tuple[float, str]] = {}
+
+
+def env_float(name: str, default: float, allow_zero: bool = True) -> float:
+    """
+    Read a numeric env var. Falls back to default if unset, not a number, negative
+    (or zero, when allow_zero is False). Records the outcome in ENV_SETTINGS.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        ENV_SETTINGS[name] = (default, "default")
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        value = None
+    if value is None or value < 0 or (value == 0 and not allow_zero):
+        ENV_SETTINGS[name] = (default, f"default, ignored invalid {raw!r}")
+        return default
+    ENV_SETTINGS[name] = (value, "env")
+    return value
+
+
+def format_env_settings() -> str:
+    return "\n\t".join(f"{name} = {value:g} ({source})"
+                       for name, (value, source) in ENV_SETTINGS.items())
+
+
+# Energy estimates for Anthropic's high-density models, in Wh per 1M tokens
+WH_PER_1M_OUTPUT = env_float("AICARE_ANTHROPIC_WH_PER_1M_OUTPUT", 1950.0)
+WH_PER_1M_CACHE_READ = env_float("AICARE_ANTHROPIC_WH_PER_1M_CACHE_READ", 39.0)
+WH_PER_1M_INPUT = env_float("AICARE_ANTHROPIC_WH_PER_1M_INPUT", 240.0)  # also used for cache creation
+# Grid carbon intensity
+KG_CO2_PER_KWH = env_float("AICARE_GRID_KG_CO2_PER_KWH", 0.275)
 
 # Directories where Claude Code stores session transcripts (same ones ccusage reads)
 CLAUDE_PROJECT_DIRS = [
@@ -32,7 +63,7 @@ def calculate_metrics(tokens_input: int, tokens_output: int,
     wh_input = ((tokens_input + tokens_ccreate) / 1_000_000) * WH_PER_1M_INPUT
 
     power_kwh = (wh_output + wh_cache_read + wh_input) / 1000.0
-    co2_kg = power_kwh * KG_CO2_PER_KWH_ITALY
+    co2_kg = power_kwh * KG_CO2_PER_KWH
 
     return power_kwh, co2_kg
 
@@ -190,17 +221,14 @@ def main():
 
     print_weekly_load(report.get("daily", []))
 
+    print(f"\nSettings used:\n\t{format_env_settings()}")
+
 
 def get_example_load_watts() -> float:
     """
     Read AICARE_EXAMPLE_ELECTRIC_LOAD [W] from the environment, falling back to the default.
     """
-    raw = os.environ.get("AICARE_EXAMPLE_ELECTRIC_LOAD", "")
-    try:
-        watts = float(raw)
-    except ValueError:
-        return DEFAULT_EXAMPLE_LOAD_W
-    return watts if watts > 0 else DEFAULT_EXAMPLE_LOAD_W
+    return env_float("AICARE_EXAMPLE_ELECTRIC_LOAD", DEFAULT_EXAMPLE_LOAD_W, allow_zero=False)
 
 
 def print_weekly_load(daily: list[dict]) -> None:
